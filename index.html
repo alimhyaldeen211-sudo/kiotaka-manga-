@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>رفع وعرض الصور بالجودة الكاملة</title>
+    <title>معرض الصور المتعددة</title>
     <style>
         * {
             box-sizing: border-box;
@@ -22,7 +22,7 @@
         }
         .container {
             width: 100%;
-            max-width: 600px;
+            max-width: 700px;
             background: #1e293b;
             padding: 24px;
             border-radius: 16px;
@@ -70,79 +70,117 @@
             font-size: 0.9rem;
             color: #94a3b8;
         }
-        .preview-container {
+        .gallery-container {
             margin-top: 25px;
-            display: none;
-            text-align: center;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+        .image-card {
+            background: #0f172a;
+            border: 1px solid #475569;
+            border-radius: 12px;
+            padding: 15px;
+            position: relative;
+            text-align: right;
+        }
+        .badge {
+            position: absolute;
+            top: 25px;
+            right: 25px;
+            background: #38bdf8;
+            color: #0f172a;
+            font-weight: bold;
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.4);
+            font-size: 1rem;
+            z-index: 10;
         }
         .preview-image {
-            max-width: 100%;
+            width: 100%;
             border-radius: 8px;
             box-shadow: 0 4px 12px rgba(0,0,0,0.5);
-            border: 1px solid #475569;
+            display: block;
+            margin-bottom: 12px;
         }
         .image-details {
-            margin-top: 12px;
             font-size: 0.85rem;
             color: #cbd5e1;
-            background: #0f172a;
+            background: #1e293b;
             padding: 10px;
             border-radius: 8px;
-            display: inline-block;
-            width: 100%;
+            line-height: 1.5;
         }
     </style>
 </head>
 <body>
 
     <div class="container">
-        <h1>معرض الصور بجودة كاملة</h1>
+        <h1>معرض الصور المتعددة</h1>
         
         <div class="upload-btn-wrapper">
-            <div class="btn-text">📁 اضغط هنا لاختيار صورة من المعرض</div>
-            <input type="file" id="imageInput" accept="image/*">
+            <div class="btn-text">📁 اضغط هنا لاختيار عدة صور من المعرض</div>
+            <input type="file" id="imageInput" accept="image/*" multiple>
         </div>
         
-        <div class="info">يتم قراءة وعرض الصورة بالدقة الأصلية تماماً بدون أي ضغط.</div>
+        <div class="info">اختر مجموعة صور وسيتم عرضها وترتيبها تلقائياً.</div>
 
-        <div class="preview-container" id="previewContainer">
-            <img id="outputImage" class="preview-image" alt="الصورة المرفوعة">
-            <div class="image-details" id="imageDetails"></div>
-        </div>
+        <div class="gallery-container" id="galleryContainer"></div>
     </div>
 
     <script>
         const imageInput = document.getElementById('imageInput');
-        const previewContainer = document.getElementById('previewContainer');
-        const outputImage = document.getElementById('outputImage');
-        const imageDetails = document.getElementById('imageDetails');
+        const galleryContainer = document.getElementById('galleryContainer');
 
         imageInput.addEventListener('change', function(event) {
-            const file = event.target.files[0];
-            if (file) {
-                const reader = new FileReader();
+            const files = event.target.files;
+            if (!files || files.length === 0) return;
+
+            // تفريغ المعرض القديم عند اختيار صور جديدة
+            galleryContainer.innerHTML = '';
+
+            // حلقة تكرارية لكل صورة تم اختيارها
+            Array.from(files).forEach((file, index) => {
+                const card = document.createElement('div');
+                card.className = 'image-card';
+
+                const badge = document.createElement('div');
+                badge.className = 'badge';
+                badge.textContent = index + 1; // الرقم التسلسلي
+
+                const img = document.createElement('img');
+                img.className = 'preview-image';
                 
-                reader.onload = function(e) {
-                    outputImage.src = e.target.result;
+                const details = document.createElement('div');
+                details.className = 'image-details';
+                details.textContent = 'جاري التحميل...';
+
+                card.appendChild(badge);
+                card.appendChild(img);
+                card.appendChild(details);
+                galleryContainer.appendChild(card);
+
+                // استخدام Object URL للسرعة
+                const objectURL = URL.createObjectURL(file);
+                img.src = objectURL;
+
+                img.onload = function() {
+                    const width = img.naturalWidth;
+                    const height = img.naturalHeight;
+                    const sizeMB = (file.size / (1024 * 1024)).toFixed(2);
                     
-                    // الانتظار حتى تحميل الصورة لمعرفة الأبعاد الحقيقية بدقة
-                    outputImage.onload = function() {
-                        const width = outputImage.naturalWidth;
-                        const height = outputImage.naturalHeight;
-                        const sizeMB = (file.size / (1024 * 1024)).toFixed(2);
-                        
-                        imageDetails.innerHTML = `
-                            اسم الملف: ${file.name} <br>
-                            الأبعاد الأصلية: ${width} × ${height} بكسل <br>
-                            الحجم: ${sizeMB} ميجابايت
-                        `;
-                        previewContainer.style.display = 'block';
-                    }
+                    details.innerHTML = `
+                        <strong>اسم الملف:</strong> ${file.name} <br>
+                        <strong>الأبعاد الأصلية:</strong> ${width} × ${height} بكسل <br>
+                        <strong>الحجم:</strong> ${sizeMB} ميجابايت
+                    `;
                 }
-                
-                // قراءة الصورة كملف بيانات (Data URL) بكامل تفاصيلها وجودتها
-                reader.readAsDataURL(file);
-            }
+            });
         });
     </script>
 
