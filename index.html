@@ -3,7 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>معرض الصور المتعددة</title>
+    <title>معرض الصور وملفات الـ PDF</title>
+    <!-- استدعاء مكتبة قراءة ملفات الـ PDF -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
     <style>
         * {
             box-sizing: border-box;
@@ -101,8 +103,9 @@
             font-size: 1rem;
             z-index: 10;
         }
-        .preview-image {
+        .preview-image, canvas {
             width: 100%;
+            height: auto;
             border-radius: 8px;
             box-shadow: 0 4px 12px rgba(0,0,0,0.5);
             display: block;
@@ -121,67 +124,128 @@
 <body>
 
     <div class="container">
-        <h1>معرض الصور المتعددة</h1>
+        <h1>معرض الصور وملفات الـ PDF</h1>
         
         <div class="upload-btn-wrapper">
-            <div class="btn-text">📁 اضغط هنا لاختيار عدة صور من المعرض</div>
-            <input type="file" id="imageInput" accept="image/*" multiple>
+            <div class="btn-text">📁 اضغط هنا لاختيار صور أو ملف PDF</div>
+            <input type="file" id="imageInput" accept="image/*,application/pdf" multiple>
         </div>
         
-        <div class="info">اختر مجموعة صور وسيتم عرضها وترتيبها تلقائياً.</div>
+        <div class="info">اختر صوراً أو ملف PDF وسيتم استخراج وعرض كل الصفحات بترتيبها.</div>
 
         <div class="gallery-container" id="galleryContainer"></div>
     </div>
 
     <script>
+        // إعداد مسار محرك الـ PDF.js
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
+
         const imageInput = document.getElementById('imageInput');
         const galleryContainer = document.getElementById('galleryContainer');
 
-        imageInput.addEventListener('change', function(event) {
+        let globalIndex = 1; // عداد تسلسلي عام لترتيب جميع العناصر المرئية
+
+        imageInput.addEventListener('change', async function(event) {
             const files = event.target.files;
             if (!files || files.length === 0) return;
 
-            // تفريغ المعرض القديم عند اختيار صور جديدة
             galleryContainer.innerHTML = '';
+            globalIndex = 1;
 
-            // حلقة تكرارية لكل صورة تم اختيارها
-            Array.from(files).forEach((file, index) => {
-                const card = document.createElement('div');
-                card.className = 'image-card';
+            for (let file of files) {
+                if (file.type === 'application/pdf') {
+                    await processPDF(file);
+                } else if (file.type.startsWith('image/')) {
+                    processImage(file);
+                }
+            }
+        });
 
-                const badge = document.createElement('div');
-                badge.className = 'badge';
-                badge.textContent = index + 1; // الرقم التسلسلي
+        // دالة لمعالجة الصور العادية
+        function processImage(file) {
+            const card = createCard(globalIndex++);
+            const img = card.querySelector('img');
+            const details = card.querySelector('.image-details');
 
-                const img = document.createElement('img');
-                img.className = 'preview-image';
+            const objectURL = URL.createObjectURL(file);
+            img.src = objectURL;
+
+            img.onload = function() {
+                const width = img.naturalWidth;
+                const height = img.naturalHeight;
+                const sizeMB = (file.size / (1024 * 1024)).toFixed(2);
                 
-                const details = document.createElement('div');
-                details.className = 'image-details';
-                details.textContent = 'جاري التحميل...';
+                details.innerHTML = `
+                    <strong>اسم الملف:</strong> ${file.name} <br>
+                    <strong>الأبعاد الأصلية:</strong> ${width} × ${height} بكسل <br>
+                    <strong>الحجم:</strong> ${sizeMB} ميجابايت
+                `;
+            }
+        }
 
-                card.appendChild(badge);
-                card.appendChild(img);
-                card.appendChild(details);
-                galleryContainer.appendChild(card);
+        // دالة لمعالجة ملفات الـ PDF وتحويل كل صفحة لصورة عالية الدقة بالترتيب
+        async function processPDF(file) {
+            try {
+                const arrayBuffer = await file.arrayBuffer();
+                const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
+                const pdfDoc = await loadingTask.promise;
+                const numPages = pdfDoc.numPages;
 
-                // استخدام Object URL للسرعة
-                const objectURL = URL.createObjectURL(file);
-                img.src = objectURL;
+                const sizeMB = (file.size / (1024 * 1024)).toFixed(2);
 
-                img.onload = function() {
-                    const width = img.naturalWidth;
-                    const height = img.naturalHeight;
-                    const sizeMB = (file.size / (1024 * 1024)).toFixed(2);
-                    
+                for (let i = 1; i <= numPages; i++) {
+                    const page = await pdfDoc.getPage(i);
+                    const scale = 2.0; // دقة عالية لضمان وضوح الصفحات
+                    const viewport = page.getViewport({ scale: scale });
+
+                    const canvas = document.createElement('canvas');
+                    const context = canvas.getContext('2d');
+                    canvas.height = viewport.height;
+                    canvas.width = viewport.width;
+
+                    await page.render({ canvasContext: context, viewport: viewport }).promise;
+
+                    const card = createCard(globalIndex++, canvas);
+                    const details = card.querySelector('.image-details');
+
                     details.innerHTML = `
-                        <strong>اسم الملف:</strong> ${file.name} <br>
-                        <strong>الأبعاد الأصلية:</strong> ${width} × ${height} بكسل <br>
-                        <strong>الحجم:</strong> ${sizeMB} ميجابايت
+                        <strong>ملف PDF:</strong> ${file.name} <br>
+                        <strong>الصفحة:</strong> ${i} من ${numPages} <br>
+                        <strong>الحجم الكلي للملف:</strong> ${sizeMB} ميجابايت
                     `;
                 }
-            });
-        });
+            } catch (error) {
+                console.error("خطأ في قراءة ملف الـ PDF", error);
+            }
+        }
+
+        // دالة مساعدة لإنشاء بطاقة العرض والشارة التسلسلية
+        function createCard(index, customElement = null) {
+            const card = document.createElement('div');
+            card.className = 'image-card';
+
+            const badge = document.createElement('div');
+            badge.className = 'badge';
+            badge.textContent = index;
+
+            card.appendChild(badge);
+
+            if (customElement) {
+                card.appendChild(customElement);
+            } else {
+                const img = document.createElement('img');
+                img.className = 'preview-image';
+                card.appendChild(img);
+            }
+
+            const details = document.createElement('div');
+            details.className = 'image-details';
+            details.textContent = 'جاري التحميل...';
+            card.appendChild(details);
+
+            galleryContainer.appendChild(card);
+            return card;
+        }
     </script>
 
 </body>
