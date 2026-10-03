@@ -137,13 +137,12 @@
     </div>
 
     <script>
-        // إعداد مسار محرك الـ PDF.js
         pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
 
         const imageInput = document.getElementById('imageInput');
         const galleryContainer = document.getElementById('galleryContainer');
 
-        let globalIndex = 1; // عداد تسلسلي عام لترتيب جميع العناصر المرئية
+        let globalIndex = 1;
 
         imageInput.addEventListener('change', async function(event) {
             const files = event.target.files;
@@ -161,7 +160,6 @@
             }
         });
 
-        // دالة لمعالجة الصور العادية
         function processImage(file) {
             const card = createCard(globalIndex++);
             const img = card.querySelector('img');
@@ -183,7 +181,6 @@
             }
         }
 
-        // دالة لمعالجة ملفات الـ PDF وتحويل كل صفحة لصورة عالية الدقة بالترتيب
         async function processPDF(file) {
             try {
                 const arrayBuffer = await file.arrayBuffer();
@@ -191,27 +188,34 @@
                 const pdfDoc = await loadingTask.promise;
                 const numPages = pdfDoc.numPages;
 
-                const sizeMB = (file.size / (1024 * 1024)).toFixed(2);
+                const totalSizeMB = (file.size / (1024 * 1024)).toFixed(2);
 
                 for (let i = 1; i <= numPages; i++) {
                     const page = await pdfDoc.getPage(i);
-                    const scale = 2.0; // دقة عالية لضمان وضوح الصفحات
-                    const viewport = page.getViewport({ scale: scale });
+                    // استخدام مقياس 1 للحصول على الأبعاد الأصلية الدقيقة للصفحة
+                    const originalViewport = page.getViewport({ scale: 1.0 });
+                    const origWidth = Math.round(originalViewport.width);
+                    const origHeight = Math.round(originalViewport.height);
+
+                    // مقياس أعلى للرسم لضمان الوضوح العالي على الشاشة
+                    const renderScale = 2.0;
+                    const renderViewport = page.getViewport({ scale: renderScale });
 
                     const canvas = document.createElement('canvas');
                     const context = canvas.getContext('2d');
-                    canvas.height = viewport.height;
-                    canvas.width = viewport.width;
+                    canvas.height = renderViewport.height;
+                    canvas.width = renderViewport.width;
 
-                    await page.render({ canvasContext: context, viewport: viewport }).promise;
+                    await page.render({ canvasContext: context, viewport: renderViewport }).promise;
 
                     const card = createCard(globalIndex++, canvas);
                     const details = card.querySelector('.image-details');
 
                     details.innerHTML = `
-                        <strong>ملف PDF:</strong> ${file.name} <br>
+                        <strong>اسم الملف:</strong> ${file.name} <br>
                         <strong>الصفحة:</strong> ${i} من ${numPages} <br>
-                        <strong>الحجم الكلي للملف:</strong> ${sizeMB} ميجابايت
+                        <strong>الأبعاد الأصلية:</strong> ${origWidth} × ${origHeight} بكسل <br>
+                        <strong>حجم ملف الـ PDF الكلي:</strong> ${totalSizeMB} ميجابايت
                     `;
                 }
             } catch (error) {
@@ -219,7 +223,6 @@
             }
         }
 
-        // دالة مساعدة لإنشاء بطاقة العرض والشارة التسلسلية
         function createCard(index, customElement = null) {
             const card = document.createElement('div');
             card.className = 'image-card';
