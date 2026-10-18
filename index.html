@@ -5,8 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>معرض الصور وقص المانجا الذكي</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.css"/>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.js"></script>
     <style>
         * {
             box-sizing: border-box;
@@ -136,6 +134,7 @@
             background: #0ea5e9;
         }
 
+        /* نافذة القص المخصصة */
         #cropModal {
             display: none;
             position: fixed;
@@ -157,15 +156,18 @@
             border-radius: 12px;
             border: 1px solid #475569;
         }
-        .img-container {
-            max-height: 55vh;
-            margin-bottom: 15px;
+        .custom-canvas-wrapper {
+            position: relative;
+            max-height: 60vh;
+            overflow-y: auto;
             background: #000;
             border-radius: 8px;
-            overflow: hidden;
+            margin-bottom: 15px;
+            border: 1px solid #475569;
+            cursor: pointer;
         }
-        .img-container img {
-            max-width: 100%;
+        #interactiveCropCanvas {
+            width: 100%;
             display: block;
         }
         .crop-controls {
@@ -221,40 +223,40 @@
 <body>
 
     <div class="container">
-        <h1>معرض الصور وقص المانجا الذكي</h1>
+        <h1>معرض الصور وقص المانجا المباشر</h1>
         
         <div class="upload-btn-wrapper">
             <div class="btn-text">📁 اضغط هنا لاختيار صور أو ملف PDF</div>
             <input type="file" id="imageInput" accept="image/*,application/pdf" multiple>
         </div>
         
-        <div class="info">اختر صورك، وتحت كل صورة اضغط على زر التعديل لقص الأجزاء بعرض الصورة الأصلي بدقة.</div>
+        <div class="info">اختر ملفاتك، وتحت كل صورة اضغط على زر التعديل للقص الدقيق دون زوائد.</div>
 
         <div class="gallery-container" id="galleryContainer"></div>
     </div>
 
-    <!-- نافذة واجهة القص الذكي -->
+    <!-- نافذة واجهة القص المخصصة -->
     <div id="cropModal">
         <div class="crop-container">
-            <h3 style="color: #38bdf8; margin-bottom: 10px;">أداة القص العمودي الدقيق</h3>
-            <p id="cropStepInfo" style="font-size: 0.85rem; color: #94a3b8; margin-bottom: 15px;">حدد طول الشريحة من الأعلى واضغط قص الجزء الحالي.</p>
+            <h3 style="color: #38bdf8; margin-bottom: 10px;">أداة القص العمودي المباشر</h3>
+            <p id="instructionText" style="font-size: 0.85rem; color: #94a3b8; margin-bottom: 15px;">انقر على النقطة التي تريد أن ينتهي عندها الجزء الحالي في الصورة.</p>
             
-            <div class="img-container">
-                <img id="imageToCrop" src="" alt="صورة للقص">
+            <div class="custom-canvas-wrapper" id="canvasWrapper">
+                <canvas id="interactiveCropCanvas"></canvas>
             </div>
 
             <div class="crop-controls">
                 <button class="btn-secondary" onclick="closeCropModal()">إغلاق</button>
-                <button class="btn-success" onclick="cropCurrentSlice()">✂️ قص هذا الجزء المحدد</button>
+                <button class="btn-success" onclick="confirmSlice()">✂️ قص حتى هذه النقطة</button>
             </div>
 
             <div class="cropped-results">
-                <h4 style="font-size: 1rem; color: #f8fafc; border-bottom: 1px solid #475569; padding-bottom: 5px;">الأجزاء المقصوصة حتى الآن:</h4>
+                <h4 style="font-size: 1rem; color: #f8fafc; border-bottom: 1px solid #475569; padding-bottom: 5px;">الأجزاء المقصوصة:</h4>
                 <div id="piecesList"></div>
             </div>
 
             <div style="margin-top: 15px;">
-                <button class="action-btn" onclick="finishCroppingSession()">✔️ تم حفظ وتهيئة الأجزاء للتنزيل</button>
+                <button class="action-btn" onclick="closeCropModal()">✔️ إنهاء وحفظ التعديلات</button>
             </div>
         </div>
     </div>
@@ -265,16 +267,16 @@
         const imageInput = document.getElementById('imageInput');
         const galleryContainer = document.getElementById('galleryContainer');
         const cropModal = document.getElementById('cropModal');
-        const imageToCrop = document.getElementById('imageToCrop');
+        const interactiveCropCanvas = document.getElementById('interactiveCropCanvas');
+        const ctx = interactiveCropCanvas.getContext('2d');
         const piecesList = document.getElementById('piecesList');
-        const cropStepInfo = document.getElementById('cropStepInfo');
+        const instructionText = document.getElementById('instructionText');
 
         let globalIndex = 1;
-        let cropper = null;
+        let activeImage = null;
+        let currentStartY = 0; // نقطة بداية الجزء الحالي
+        let selectedEndY = 0;  // النقطة التي حددها المستخدم لنهاية القص
         let croppedPieces = [];
-        let currentStartY = 0; // نقطة البداية العمودية للشريحة التالية لتجنب أي فجوات أو زوائد
-        let originalImgWidth = 0;
-        let originalImgHeight = 0;
 
         imageInput.addEventListener('change', async function(event) {
             const files = event.target.files;
@@ -302,18 +304,18 @@
             img.src = objectURL;
 
             img.onload = function() {
-                originalImgWidth = img.naturalWidth;
-                originalImgHeight = img.naturalHeight;
+                const width = img.naturalWidth;
+                const height = img.naturalHeight;
                 const sizeMB = (file.size / (1024 * 1024)).toFixed(2);
                 
                 details.innerHTML = `
                     <strong>اسم الملف:</strong> ${file.name} <br>
-                    <strong>الأبعاد:</strong> ${originalImgWidth} × ${originalImgHeight} بكسل <br>
+                    <strong>الأبعاد:</strong> ${width} × ${height} بكسل <br>
                     <strong>الحجم:</strong> ${sizeMB} ميجابايت
                 `;
 
                 editBtn.onclick = function() {
-                    openCropModal(objectURL, originalImgWidth, originalImgHeight);
+                    openCustomCrop(img);
                 };
             }
         }
@@ -358,8 +360,7 @@
                     `;
 
                     editBtn.onclick = function() {
-                        // استخدام الأبعاد الأصلية المضاعفة للـ canvas لضمان الدقة الكاملة
-                        openCropModal(dataURL, canvas.width, canvas.height);
+                        openCustomCrop(imgObj);
                     };
                 }
             } catch (error) {
@@ -388,103 +389,102 @@
 
             const editBtn = document.createElement('button');
             editBtn.className = 'action-btn';
-            editBtn.textContent = '✏️ قص ذكي عمودي';
+            editBtn.textContent = '✏️ قص عمودي دقيق';
             card.appendChild(editBtn);
 
             galleryContainer.appendChild(card);
             return card;
         }
 
-        function openCropModal(imageSrc, imgWidth, imgHeight) {
+        function openCustomCrop(imgObj) {
+            activeImage = imgObj;
+            currentStartY = 0;
+            selectedEndY = imgObj.naturalHeight / 3; // افتراضياً نقطة مقترحة للثتل الأول
             croppedPieces = [];
             piecesList.innerHTML = '';
-            currentStartY = 0;
-            originalImgWidth = imgWidth;
-            originalImgHeight = imgHeight;
 
-            imageToCrop.src = imageSrc;
             cropModal.style.display = 'block';
+            drawCanvas();
 
-            if (cropper) {
-                cropper.destroy();
-            }
+            // النقر على الصورة لتحديد خط القطع بدقة
+            interactiveCropCanvas.onclick = function(e) {
+                const rect = interactiveCropCanvas.getBoundingClientRect();
+                const scaleY = interactiveCropCanvas.height / rect.height;
+                const clickY = (e.clientY - rect.top) * scaleY;
 
-            // إعداد Cropper بحيث يكون العرض ثابتاً وممتداً على كامل عرض الصورة الأصلية تلقائياً
-            // ونسمح للـ المستخدم بالتحكم بارتفاع شريحة القص فقط
-            setTimeout(() => {
-                cropper = new Cropper(imageToCrop, {
-                    viewMode: 1,
-                    dragMode: 'crop',
-                    autoCropArea: 1,
-                    responsive: true,
-                    restore: false,
-                    // قفل العرض ليكون بنفس عرض الصورة بالكامل لضمان عدم وجود زوائد أو نواقص جانبية
-                    ready() {
-                        const containerData = cropper.getContainerData();
-                        cropper.setCropBoxData({
-                            left: 0,
-                            top: 0,
-                            width: containerData.width,
-                            height: Math.min(containerData.height, 400)
-                        });
-                    }
-                });
-            }, 100);
-
-            updateStepInfo();
+                if (clickY > currentStartY) {
+                    selectedEndY = Math.round(clickY);
+                    drawCanvas();
+                }
+            };
         }
 
         function closeCropModal() {
-            if (cropper) {
-                cropper.destroy();
-            }
             cropModal.style.display = 'none';
         }
 
-        function cropCurrentSlice() {
-            if (!cropper) return;
+        function drawCanvas() {
+            interactiveCropCanvas.width = activeImage.naturalWidth;
+            interactiveCropCanvas.height = activeImage.naturalHeight;
 
-            // الحصول على البيانات النسبية للقص
-            const cropData = cropper.getData(true); // دقة بكسل أصلية
+            // رسم الصورة الأصلية كامضة
+            ctx.drawImage(activeImage, 0, 0);
 
-            const canvas = cropper.getCroppedCanvas({
-                width: cropData.width,
-                height: cropData.height,
-                imageSmoothingEnabled: true,
-                imageSmoothingQuality: 'high',
-            });
+            // تظليل الجزء الذي تم قصه مسبقاً (أعلى نقطة البداية) بلون غامق مع علامة صح
+            if (currentStartY > 0) {
+                ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
+                ctx.fillRect(0, 0, interactiveCropCanvas.width, currentStartY);
+                ctx.fillStyle = '#38bdf8';
+                ctx.font = 'bold 36px sans-serif';
+                ctx.fillText('✔️ تم قص هذا الجزء وحفظه', 40, currentStartY / 2);
+            }
 
-            const croppedDataURL = canvas.toDataURL('image/jpeg', 1.0);
-            croppedPieces.push(croppedDataURL);
+            // رسم خط فاصل أحمر واضح يوضح مكان القص الذي اختاره المستخدم
+            ctx.strokeStyle = '#ef4444';
+            ctx.lineWidth = 6;
+            ctx.beginPath();
+            ctx.moveTo(0, selectedEndY);
+            ctx.lineTo(interactiveCropCanvas.width, selectedEndY);
+            ctx.stroke();
 
-            updatePiecesListUI();
+            instructionText.textContent = `الجزء الحالي يبدأ من الارتفاع ${currentStartY} وينتهي عند ${selectedEndY}. انقر على أي مكان لتغيير خط النهاية ثم اضغط قص.`;
+        }
 
-            // تحديث نقطة البداية لتكون من نهاية الجزء الذي تم قصه تماماً لتجنب أي تداخل
-            currentStartY = cropData.y + cropData.height;
-
-            if (currentStartY >= originalImgHeight - 10) {
-                alert('تم قص الصورة بالكامل حتى نهايتها بنجاح!');
+        function confirmSlice() {
+            if (selectedEndY <= currentStartY + 10) {
+                alert('يجب أن يكون طول الشريحة أكبر!');
                 return;
             }
 
-            // ضبط صندوق القص تلقائياً ليبدأ من حيث انتهى الجزء السابق ويكمل للأسفل
-            const remainingHeight = originalImgHeight - currentStartY;
-            const nextHeight = Math.min(remainingHeight, 800); // شريحة افتراضية تالية
+            const sliceHeight = selectedEndY - currentStartY;
+            const sliceCanvas = document.createElement('canvas');
+            sliceCanvas.width = activeImage.naturalWidth;
+            sliceCanvas.height = sliceHeight;
+            const sliceCtx = sliceCanvas.getContext('2d');
 
-            // إعادة ضبط منطقة التحديد للشريحة التالية
-            cropper.setData({
-                x: 0,
-                y: currentStartY,
-                width: originalImgWidth,
-                height: nextHeight
-            });
+            // قص الجزء بدقته وعرضه الكامل تماماً ودون أي زوائد
+            sliceCtx.drawImage(
+                activeImage,
+                0, currentStartY, activeImage.naturalWidth, sliceHeight,
+                0, 0, activeImage.naturalWidth, sliceHeight
+            );
 
-            updateStepInfo();
-            alert('تم قص وحفظ الجزء بنجاح! انتقلت أداة التحديد تلقائياً للجزء المتبقي.');
-        }
+            const dataURL = sliceCanvas.toDataURL('image/jpeg', 1.0);
+            croppedPieces.push(dataURL);
+            updatePiecesListUI();
 
-        function updateStepInfo() {
-            cropStepInfo.textContent = `الجزء الحالي يبدأ من الارتفاع ${currentStartY} بكسل. حدد طول الشريحة واضغط قص.`;
+            // تحديث نقطة البداية لتصبح هي نفسها نقطة النهاية (تنتقل أوتوماتيكياً للجزء المتبقي بدقة)
+            currentStartY = selectedEndY;
+
+            if (currentStartY >= activeImage.naturalHeight - 10) {
+                alert('تم قص الصورة كاملة حتى نهايتها بنجاح!');
+                return;
+            }
+
+            // اقتراح نقطة نهاية جديدة للجزء التالي
+            selectedEndY = Math.min(activeImage.naturalHeight, currentStartY + 1200);
+            drawCanvas();
+            alert('تم قص الجزء الحالي بنجاح وتظليله، وانتقلت الأداة تلقائياً للجزء المتبقي!');
         }
 
         function updatePiecesListUI() {
@@ -495,21 +495,12 @@
                 item.innerHTML = `
                     <div style="display: flex; align-items: center; gap: 10px;">
                         <img src="${url}">
-                        <span style="font-size: 0.90rem;">الجزء المتقن (${idx + 1})</span>
+                        <span style="font-size: 0.90rem;">الجزء المقصوص (${idx + 1})</span>
                     </div>
-                    <a href="${url}" download="manga_part_${idx + 1}.jpg" class="btn-success" style="text-decoration:none; font-size:0.75rem; padding: 4px 8px;">📥 تنزيل</a>
+                    <a href="${url}" download="manga_piece_${idx + 1}.jpg" class="btn-success" style="text-decoration:none; font-size:0.75rem; padding: 4px 8px;">📥 تنزيل</a>
                 `;
                 piecesList.appendChild(item);
             });
-        }
-
-        function finishCroppingSession() {
-            if (croppedPieces.length === 0) {
-                alert('لم تقم بقص أي جزء بعد!');
-                return;
-            }
-            alert(`تم الانتهاء! أصبح لديك ${croppedPieces.length} جزء مقصوص بعرض الصورة الأصلي بدقة تامة.`);
-            closeCropModal();
         }
     </script>
 
