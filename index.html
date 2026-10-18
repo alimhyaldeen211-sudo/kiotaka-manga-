@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>معرض الصور وقص المانجا الذكي</title>
+    <title>معرض الصور، القص، والدمج الذكي للمانجا</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
     <style>
         * {
@@ -119,23 +119,35 @@
             line-height: 1.5;
             margin-bottom: 10px;
         }
+        .card-actions {
+            display: flex;
+            gap: 10px;
+        }
         .action-btn {
             background: #38bdf8;
             color: #0f172a;
             border: none;
-            padding: 8px 16px;
+            padding: 10px;
             border-radius: 8px;
             font-weight: bold;
             cursor: pointer;
             transition: 0.2s;
-            width: 100%;
+            flex: 1;
+            font-size: 0.9rem;
         }
         .action-btn:hover {
             background: #0ea5e9;
         }
+        .merge-btn {
+            background: #10b981;
+            color: #fff;
+        }
+        .merge-btn:hover {
+            background: #059669;
+        }
 
-        /* نافذة القص المخصصة */
-        #cropModal {
+        /* النوافذ المنبثقة (القص والدمج) */
+        .modal {
             display: none;
             position: fixed;
             top: 0;
@@ -148,7 +160,7 @@
             padding: 15px;
             text-align: center;
         }
-        .crop-container {
+        .modal-content {
             max-width: 650px;
             margin: auto;
             background: #1e293b;
@@ -223,30 +235,30 @@
 <body>
 
     <div class="container">
-        <h1>معرض الصور وقص المانجا المباشر</h1>
+        <h1>معرض الصور، القص، والدمج للمانجا</h1>
         
         <div class="upload-btn-wrapper">
             <div class="btn-text">📁 اضغط هنا لاختيار صور أو ملف PDF</div>
             <input type="file" id="imageInput" accept="image/*,application/pdf" multiple>
         </div>
         
-        <div class="info">اختر ملفاتك، وتحت كل صورة اضغط على زر التعديل للقص الدقيق دون زوائد.</div>
+        <div class="info">اختر ملفاتك، واستخدم زر القص أو زر الدمج تحت أي صورة بكل سهولة.</div>
 
         <div class="gallery-container" id="galleryContainer"></div>
     </div>
 
-    <!-- نافذة واجهة القص المخصصة -->
-    <div id="cropModal">
-        <div class="crop-container">
-            <h3 style="color: #38bdf8; margin-bottom: 10px;">أداة القص العمودي المباشر</h3>
-            <p id="instructionText" style="font-size: 0.85rem; color: #94a3b8; margin-bottom: 15px;">انقر على النقطة التي تريد أن ينتهي عندها الجزء الحالي في الصورة.</p>
+    <!-- نافذة أداة القص العمودي الدقيق -->
+    <div id="cropModal" class="modal">
+        <div class="modal-content">
+            <h3 style="color: #38bdf8; margin-bottom: 10px;">أداة القص العمودي الدقيق ✏️</h3>
+            <p id="instructionText" style="font-size: 0.85rem; color: #94a3b8; margin-bottom: 15px;">انقر على النقطة التي تريد أن ينتهي عندها الجزء الحالي.</p>
             
             <div class="custom-canvas-wrapper" id="canvasWrapper">
                 <canvas id="interactiveCropCanvas"></canvas>
             </div>
 
             <div class="crop-controls">
-                <button class="btn-secondary" onclick="closeCropModal()">إغلاق</button>
+                <button class="btn-secondary" onclick="closeModal('cropModal')">إغلاق</button>
                 <button class="btn-success" onclick="confirmSlice()">✂️ قص حتى هذه النقطة</button>
             </div>
 
@@ -256,7 +268,33 @@
             </div>
 
             <div style="margin-top: 15px;">
-                <button class="action-btn" onclick="closeCropModal()">✔️ إنهاء وحفظ التعديلات</button>
+                <button class="action-btn" onclick="closeModal('cropModal')">✔️ إنهاء وحفظ التعديلات</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- نافذة أداة الدمج العمودي -->
+    <div id="mergeModal" class="modal">
+        <div class="modal-content">
+            <h3 style="color: #10b981; margin-bottom: 10px;">أداة دمج الصور والشرائح 🧩</h3>
+            <p style="font-size: 0.85rem; color: #94a3b8; margin-bottom: 15px;">اختر عدة صور أو شرائح لدمجها معاً عمودياً بالدقة الأصلية:</p>
+            
+            <div class="upload-btn-wrapper" style="padding: 15px; margin-bottom: 15px;">
+                <div class="btn-text" style="font-size: 0.95rem;">📂 اختر الصور المراد دمجها</div>
+                <input type="file" id="mergeImagesInput" accept="image/*" multiple>
+            </div>
+
+            <div id="mergePreviewContainer" style="max-height: 150px; overflow-y: auto; display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 15px; justify-content: center;"></div>
+
+            <div class="crop-controls">
+                <button class="btn-secondary" onclick="closeModal('mergeModal')">إغلاق</button>
+                <button class="action-btn merge-btn" onclick="executeMerge()" style="flex: none; padding: 8px 20px;">🧩 دمج الصور الآن</button>
+            </div>
+
+            <div id="mergeResultArea" style="margin-top: 20px; display: none; text-align: center;">
+                <h4 style="color: #f8fafc; margin-bottom: 10px;">نتيجة الدمج:</h4>
+                <img id="mergedResultImg" style="max-width: 100%; max-height: 250px; border-radius: 8px; margin-bottom: 10px; display: block; margin-left: auto; margin-right: auto;">
+                <a id="downloadMergedBtn" class="action-btn merge-btn" style="text-decoration: none; display: inline-block;" download="merged_manga.jpg">📥 تنزيل الصورة المدمجة بالدقة الأصلية</a>
             </div>
         </div>
     </div>
@@ -267,6 +305,7 @@
         const imageInput = document.getElementById('imageInput');
         const galleryContainer = document.getElementById('galleryContainer');
         const cropModal = document.getElementById('cropModal');
+        const mergeModal = document.getElementById('mergeModal');
         const interactiveCropCanvas = document.getElementById('interactiveCropCanvas');
         const ctx = interactiveCropCanvas.getContext('2d');
         const piecesList = document.getElementById('piecesList');
@@ -274,9 +313,10 @@
 
         let globalIndex = 1;
         let activeImage = null;
-        let currentStartY = 0; // نقطة بداية الجزء الحالي
-        let selectedEndY = 0;  // النقطة التي حددها المستخدم لنهاية القص
+        let currentStartY = 0;
+        let selectedEndY = 0;
         let croppedPieces = [];
+        let imagesToMerge = [];
 
         imageInput.addEventListener('change', async function(event) {
             const files = event.target.files;
@@ -298,7 +338,8 @@
             const card = createCard(globalIndex++);
             const img = card.querySelector('img');
             const details = card.querySelector('.image-details');
-            const editBtn = card.querySelector('.action-btn');
+            const cropBtn = card.querySelector('.crop-btn');
+            const mergeBtn = card.querySelector('.merge-btn');
 
             const objectURL = URL.createObjectURL(file);
             img.src = objectURL;
@@ -314,8 +355,12 @@
                     <strong>الحجم:</strong> ${sizeMB} ميجابايت
                 `;
 
-                editBtn.onclick = function() {
+                cropBtn.onclick = function() {
                     openCustomCrop(img);
+                };
+
+                mergeBtn.onclick = function() {
+                    openMergeModal();
                 };
             }
         }
@@ -351,7 +396,8 @@
 
                     const card = createCard(globalIndex++, imgObj);
                     const details = card.querySelector('.image-details');
-                    const editBtn = card.querySelector('.action-btn');
+                    const cropBtn = card.querySelector('.crop-btn');
+                    const mergeBtn = card.querySelector('.merge-btn');
 
                     details.innerHTML = `
                         <strong>اسم الملف:</strong> ${file.name} (صفحة ${i}/${numPages}) <br>
@@ -359,8 +405,12 @@
                         <strong>حجم الـ PDF:</strong> ${totalSizeMB} ميجابايت
                     `;
 
-                    editBtn.onclick = function() {
+                    cropBtn.onclick = function() {
                         openCustomCrop(imgObj);
+                    };
+
+                    mergeBtn.onclick = function() {
+                        openMergeModal();
                     };
                 }
             } catch (error) {
@@ -387,26 +437,36 @@
             details.textContent = 'جاري التحميل...';
             card.appendChild(details);
 
-            const editBtn = document.createElement('button');
-            editBtn.className = 'action-btn';
-            editBtn.textContent = '✏️ قص عمودي دقيق';
-            card.appendChild(editBtn);
+            const actionsDiv = document.createElement('div');
+            actionsDiv.className = 'card-actions';
+
+            const cropBtn = document.createElement('button');
+            cropBtn.className = 'action-btn crop-btn';
+            cropBtn.textContent = '✏️ قص عمودي دقيق';
+
+            const mergeBtn = document.createElement('button');
+            mergeBtn.className = 'action-btn merge-btn';
+            mergeBtn.textContent = '🧩 دمج الصور';
+
+            actionsDiv.appendChild(cropBtn);
+            actionsDiv.appendChild(mergeBtn);
+            card.appendChild(actionsDiv);
 
             galleryContainer.appendChild(card);
             return card;
         }
 
+        // --- نظام القص ---
         function openCustomCrop(imgObj) {
             activeImage = imgObj;
             currentStartY = 0;
-            selectedEndY = imgObj.naturalHeight / 3; // افتراضياً نقطة مقترحة للثتل الأول
+            selectedEndY = imgObj.naturalHeight / 3;
             croppedPieces = [];
             piecesList.innerHTML = '';
 
             cropModal.style.display = 'block';
             drawCanvas();
 
-            // النقر على الصورة لتحديد خط القطع بدقة
             interactiveCropCanvas.onclick = function(e) {
                 const rect = interactiveCropCanvas.getBoundingClientRect();
                 const scaleY = interactiveCropCanvas.height / rect.height;
@@ -419,18 +479,11 @@
             };
         }
 
-        function closeCropModal() {
-            cropModal.style.display = 'none';
-        }
-
         function drawCanvas() {
             interactiveCropCanvas.width = activeImage.naturalWidth;
             interactiveCropCanvas.height = activeImage.naturalHeight;
-
-            // رسم الصورة الأصلية كامضة
             ctx.drawImage(activeImage, 0, 0);
 
-            // تظليل الجزء الذي تم قصه مسبقاً (أعلى نقطة البداية) بلون غامق مع علامة صح
             if (currentStartY > 0) {
                 ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
                 ctx.fillRect(0, 0, interactiveCropCanvas.width, currentStartY);
@@ -439,7 +492,6 @@
                 ctx.fillText('✔️ تم قص هذا الجزء وحفظه', 40, currentStartY / 2);
             }
 
-            // رسم خط فاصل أحمر واضح يوضح مكان القص الذي اختاره المستخدم
             ctx.strokeStyle = '#ef4444';
             ctx.lineWidth = 6;
             ctx.beginPath();
@@ -462,7 +514,6 @@
             sliceCanvas.height = sliceHeight;
             const sliceCtx = sliceCanvas.getContext('2d');
 
-            // قص الجزء بدقته وعرضه الكامل تماماً ودون أي زوائد
             sliceCtx.drawImage(
                 activeImage,
                 0, currentStartY, activeImage.naturalWidth, sliceHeight,
@@ -473,7 +524,6 @@
             croppedPieces.push(dataURL);
             updatePiecesListUI();
 
-            // تحديث نقطة البداية لتصبح هي نفسها نقطة النهاية (تنتقل أوتوماتيكياً للجزء المتبقي بدقة)
             currentStartY = selectedEndY;
 
             if (currentStartY >= activeImage.naturalHeight - 10) {
@@ -481,7 +531,6 @@
                 return;
             }
 
-            // اقتراح نقطة نهاية جديدة للجزء التالي
             selectedEndY = Math.min(activeImage.naturalHeight, currentStartY + 1200);
             drawCanvas();
             alert('تم قص الجزء الحالي بنجاح وتظليله، وانتقلت الأداة تلقائياً للجزء المتبقي!');
@@ -501,6 +550,92 @@
                 `;
                 piecesList.appendChild(item);
             });
+        }
+
+        // --- نظام الدمج الجديد ---
+        function openMergeModal() {
+            imagesToMerge = [];
+            document.getElementById('mergePreviewContainer').innerHTML = '';
+            document.getElementById('mergeResultArea').style.display = 'none';
+            document.getElementById('mergeImagesInput').value = '';
+            mergeModal.style.display = 'block';
+        }
+
+        document.getElementById('mergeImagesInput').addEventListener('change', async function(e) {
+            const files = e.target.files;
+            if (!files || files.length === 0) return;
+
+            const previewContainer = document.getElementById('mergePreviewContainer');
+            
+            for (let file of files) {
+                const url = URL.createObjectURL(file);
+                imagesToMerge.push(url);
+
+                const thumb = document.createElement('img');
+                thumb.src = url;
+                thumb.style.width = '60px';
+                thumb.style.height = '60px';
+                thumb.style.objectFit = 'cover';
+                thumb.style.borderRadius = '6px';
+                thumb.style.border = '2px solid #10b981';
+                previewContainer.appendChild(thumb);
+            }
+        });
+
+        async function executeMerge() {
+            if (imagesToMerge.length < 2) {
+                alert('الرجاء اختيار صرتين أو أكثر لدمجهما معاً!');
+                return;
+            }
+
+            // تحميل كافة الصور ومعرفة أبعادها
+            const loadedImages = await Promise.all(imagesToMerge.map(url => {
+                return new Promise((resolve) => {
+                    const img = new Image();
+                    img.src = url;
+                    img.onload = () => resolve(img);
+                });
+            }));
+
+            // تحديد أرجح عرض (نأخذ عرض أول صورة كمعيار أو عرض موحد)
+            const targetWidth = loadedImages[0].naturalWidth;
+            let totalHeight = 0;
+
+            // حساب الارتفاع الكلي بعد الدمج العمودي مع الحفاظ على تناسب العرض
+            const scaledDimensions = loadedImages.map(img => {
+                const scale = targetWidth / img.naturalWidth;
+                const h = Math.round(img.naturalHeight * scale);
+                totalHeight += h;
+                return { img, height: h };
+            });
+
+            // إنشاء لوحة الرسم (Canvas) للدمج بدقة كاملة
+            const mergeCanvas = document.createElement('canvas');
+            mergeCanvas.width = targetWidth;
+            mergeCanvas.height = totalHeight;
+            const mergeCtx = mergeCanvas.getContext('2d');
+
+            let currentY = 0;
+            for (let item of scaledDimensions) {
+                mergeCtx.drawImage(item.img, 0, currentY, targetWidth, item.height);
+                currentY += item.height;
+            }
+
+            const finalMergedURL = mergeCanvas.toDataURL('image/jpeg', 1.0);
+            
+            // عرض النتيجة
+            const resultImg = document.getElementById('mergedResultImg');
+            resultImg.src = finalMergedURL;
+
+            const downloadBtn = document.getElementById('downloadMergedBtn');
+            downloadBtn.href = finalMergedURL;
+
+            document.getElementById('mergeResultArea').style.display = 'block';
+            alert('تم دمج الصور بنجاح وجاهزة للتنزيل!');
+        }
+
+        function closeModal(modalId) {
+            document.getElementById(modalId).style.display = 'none';
         }
     </script>
 
